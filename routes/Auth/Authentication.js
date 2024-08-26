@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mysql2 = require('mysql2');
-const bcrypt = require('bcrypt');
-const cors = require('cors');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const pool = mysql2.createPool({
@@ -15,22 +14,19 @@ const pool = mysql2.createPool({
   queueLimit: 0,
 });
 
-// CORS configuration
-router.use(cors({
-  origin: 'http://localhost:5173', // Replace with your frontend URL
-}));
-
-router.get('/', async (req, res) => {
+router.get('/', (req, res) => {
   const { userName, password } = req.query;
 
   if (!userName || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
+  const hashedPassword = crypto.createHash('md5').update(password).digest('hex');
+
   pool.query(
-    'SELECT * FROM user_tb WHERE username = ?',
-    [userName],
-    async (error, results) => {
+    'SELECT * FROM user_tb WHERE username = ? AND password = ?',
+    [userName, hashedPassword],
+    (error, results) => {
       if (error) {
         console.error('Database query error:', error);
         return res.status(500).json({ error: 'Database query error' });
@@ -41,13 +37,8 @@ router.get('/', async (req, res) => {
       }
 
       const user = results[0];
-      const isMatch = await bcrypt.compare(password, user.password);
-
-      if (!isMatch) {
-        return res.status(401).json({ error: 'Invalid username or password' });
-      }
-
       const roleName = user.role_name;
+
       const updatePermission = ['Admin', 'Manager', 'Accounts'].includes(roleName);
       const deletePermission = roleName === 'Admin';
 
